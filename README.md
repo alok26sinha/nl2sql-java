@@ -1,17 +1,83 @@
-# nl2sql (Java)
+# nl2sql: ask your relational database questions in plain English
 
-Ask a relational database questions in plain English over a REST API. nl2sql reads the schema, has an LLM write
-the SQL, checks it against strict guardrails, runs it read-only and returns the rows.
+nl2sql turns a question like *"Which 5 carriers had the most late deliveries last quarter?"* into correct SQL
+for your real schema, checks it against strict guardrails, runs it read-only and returns the rows.
+Use it as a Java library, a REST server, or a free Windows desktop app.
 
-- **Databases:** MySQL, MariaDB, PostgreSQL, Microsoft SQL Server, Oracle, SQLite (all drivers bundled)
-- **LLMs:** any OpenAI-compatible API (OpenAI, Azure OpenAI, Groq, Together, Ollama, vLLM, LiteLLM, ...) or Anthropic
-- **Configuration:** a properties file and/or environment variables. No code needed.
-- **Two ways to use it:** a standalone REST server (one runnable jar, Java 21), or the `nl2sql-core` library
-  embedded in your own Java application, from Maven Central.
-
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.alok26sinha/nl2sql-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.alok26sinha/nl2sql-core)
 [![CI](https://github.com/alok26sinha/nl2sql-java/actions/workflows/ci.yml/badge.svg)](https://github.com/alok26sinha/nl2sql-java/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/github/license/alok26sinha/nl2sql-java)](LICENSE)
+![Java 21](https://img.shields.io/badge/Java-21-blue)
 
-## Quick start
+<!-- DEMO GIF GOES HERE: docs/demo.gif (question typed, SQL shown, result table, then a follow-up question) -->
+<!-- ![nl2sql demo](docs/demo.gif) -->
+
+- **Databases:** MySQL, MariaDB, PostgreSQL, SQL Server, Oracle, SQLite (drivers bundled in the server)
+- **LLMs:** OpenAI, Azure OpenAI, Anthropic, Groq, Ollama, or any OpenAI-compatible endpoint
+- **Real SQL:** joins, aggregations, CTEs, date logic, the right dialect. If the database rejects the query, the
+  model fixes it and retries.
+- **Guardrails:** a single SELECT only, known tables and columns only, blocked columns, read-only transactions,
+  a row limit and a statement timeout
+- **Privacy:** only the schema (table and column names, plus a few sample values of code-like columns) goes to the
+  LLM, never your result rows
+- **Follow-up questions:** pass earlier turns and ask "now only for Mumbai"
+
+**Who it's for:** business users who want their own KPIs and ad-hoc reports without waiting for a developer;
+product teams adding an "ask your data" box; analysts who want a fast first draft of a complex query.
+
+## 60-second quick start
+
+### Desktop app (Windows, no code)
+
+1. Download the installer from [nl2sql-desktop releases](https://github.com/alok26sinha/nl2sql-desktop/releases/latest).
+2. Enter your database (type, host, name, user, password; a read-only user is recommended) and your AI model
+   (endpoint URL, model name, API key).
+3. Type a question.
+
+### Java library
+
+```xml
+<dependency>
+  <groupId>io.github.alok26sinha</groupId>
+  <artifactId>nl2sql-core</artifactId>
+  <version>0.1.0</version>
+</dependency>
+<!-- plus the JDBC driver for your database -->
+```
+
+```java
+Nl2SqlSettings s = new Nl2SqlSettings();
+s.getDb().setType("postgres");
+s.getDb().setHost("localhost");
+s.getDb().setName("sales");
+s.getDb().setUsername("readonly");
+s.getDb().setPassword(System.getenv("DB_PASSWORD"));
+s.getLlm().setModel("gpt-4.1-mini");
+s.getLlm().setApiKey(System.getenv("LLM_API_KEY"));
+
+try (Nl2SqlEngine engine = Nl2SqlEngine.create(s)) {
+    QueryResult r = engine.ask("Top 10 customers by revenue this year", List.of());
+    System.out.println(r.sql());
+    r.rows().forEach(System.out::println);
+}
+```
+
+Java 21, Apache-2.0. The core library has no Spring dependency. More in
+[Embedding the library](#embedding-the-library-in-your-application).
+
+### REST server
+
+```bash
+export NL2SQL_DB_TYPE=mysql NL2SQL_DB_HOST=localhost NL2SQL_DB_NAME=shop NL2SQL_DB_USERNAME=ro NL2SQL_DB_PASSWORD='...'
+export NL2SQL_LLM_MODEL=gpt-4.1-mini NL2SQL_LLM_API_KEY='sk-...'
+java -jar nl2sql-0.1.0.jar      # from GitHub Releases
+curl -s localhost:8080/v1/ask -H 'Content-Type: application/json' -d '{"question":"How many orders shipped late last week?"}'
+```
+
+Endpoints: `/v1/ask`, `/v1/generate`, `/v1/schema`, `/v1/info`, `/v1/examples`. Set `NL2SQL_SERVER_API_KEY` to
+require the `X-API-Key` header. Full setup below.
+
+## REST server: full setup
 
 1. Download `nl2sql-<version>.jar` from [Releases](https://github.com/alok26sinha/nl2sql-java/releases) (needs Java 21+).
 2. Configure it with environment variables...
