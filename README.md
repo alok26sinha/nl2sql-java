@@ -284,6 +284,38 @@ Other calls: `generate(question, history)` returns validated SQL without running
 stores a verified example, `catalog()` returns the schema, and `history` (a list of earlier `Turn(question, sql)`)
 enables follow-up questions. The library uses Jackson 2, HikariCP, JSqlParser and SLF4J, and no Spring.
 
+### Spring Boot starter
+
+In a Spring Boot application, add the starter instead of wiring the engine yourself:
+
+```xml
+<dependency>
+  <groupId>io.github.alok26sinha</groupId>
+  <artifactId>nl2sql-spring-boot-starter</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+It auto-configures a single `Nl2SqlEngine` bean from your `nl2sql.*` properties (the same keys as the table
+above, e.g. `nl2sql.db.type`, `nl2sql.llm.model`, `nl2sql.guardrails.max-rows`). If your application already has a
+`DataSource` bean, the engine **reuses it** (use a read-only account) and does not close it on shutdown; set at
+least `nl2sql.db.type` so the engine knows the dialect. With no `DataSource` bean it opens its own pool from
+`nl2sql.db.*`. A `LlmProvider` bean, if present, is used instead of the `nl2sql.llm.*` settings, and defining your
+own `Nl2SqlEngine` bean turns the auto-configuration off.
+
+```java
+@RestController
+class AskController {
+    private final Nl2SqlEngine engine;
+    AskController(Nl2SqlEngine engine) { this.engine = engine; } // injected by the starter
+
+    @PostMapping("/ask")
+    QueryResult ask(@RequestBody String question) { return engine.ask(question, List.of()); }
+}
+```
+
+The core library stays Spring-free; the starter is the only module that depends on Spring.
+
 ## Running as a service
 
 ```bash
@@ -301,6 +333,7 @@ java -jar nl2sql-server/target/nl2sql-0.1.0-SNAPSHOT.jar
 Modules:
 
 - `nl2sql-core`: framework-free engine (schema introspection, prompting, guardrails, execution, LLM clients)
+- `nl2sql-spring-boot-starter`: Spring Boot auto-configuration that exposes an `Nl2SqlEngine` bean
 - `nl2sql-server`: Spring Boot 4 REST API and runnable jar
 
 CI runs the full suite against MySQL 8.4, MariaDB 11, PostgreSQL 16, SQL Server 2022 and Oracle 23 Free.

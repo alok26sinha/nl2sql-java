@@ -48,6 +48,7 @@
 
     <modules>
         <module>nl2sql-core</module>
+        <module>nl2sql-spring-boot-starter</module>
         <module>nl2sql-server</module>
     </modules>
 
