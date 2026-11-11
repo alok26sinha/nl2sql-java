@@ -1,0 +1,6 @@
+.git
+.tools
+**/target
+*.env
+*.asc
+nl2sql.properties

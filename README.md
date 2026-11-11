@@ -286,10 +286,22 @@ enables follow-up questions. The library uses Jackson 2, HikariCP, JSqlParser an
 
 ## Running as a service
 
+The official image is published to GHCR on each release as both `X.Y.Z` and `latest`:
+[`ghcr.io/alok26sinha/nl2sql`](https://github.com/alok26sinha/nl2sql/pkgs/container/nl2sql).
+The container listens on `0.0.0.0:8080`; set `NL2SQL_SERVER_HOST` or `NL2SQL_SERVER_PORT` to override those defaults.
+Configure database, LLM, and other settings with the `NL2SQL_*` environment variables in the table above.
+
+Create `nl2sql.env` with your required `NL2SQL_DB_*` and `NL2SQL_LLM_*` settings, and set a strong
+`NL2SQL_SERVER_API_KEY`. The API key is optional in the application, but should be treated as required whenever
+the server is reachable by untrusted clients; it is checked against the `X-API-Key` header on `/v1/*`.
+Keep the env file private.
+
 ```bash
-docker run -d --name nl2sql -p 8080:8080 --env-file nl2sql.env -e NL2SQL_SERVER_HOST=0.0.0.0 \
-  -v "$PWD/nl2sql-0.1.0.jar:/app.jar:ro" eclipse-temurin:21-jre java -jar /app.jar
+docker run -d --name nl2sql --restart unless-stopped -p 8080:8080 --env-file nl2sql.env \
+  ghcr.io/alok26sinha/nl2sql:latest
 ```
+
+For a fixed deployment version, replace `latest` with the release version, for example `0.1.0`.
 
 ## Building from source
 
