@@ -68,6 +68,15 @@ nl2sql.llm.model=gpt-4.1-mini
 # env: NL2SQL_MAX_CORRECTION_ATTEMPTS
 # nl2sql.guardrails.max-correction-attempts=2
 
+# ---- Result summary (optional, OFF by default) ---------------------------------------------------
+# Add a one-paragraph plain-English summary of the rows to each answer.
+# WARNING: this SENDS RESULT ROWS to the LLM. By default only the schema is sent, never your data.
+# env: NL2SQL_SUMMARY_ENABLED
+# nl2sql.summary.enabled=false
+# At most this many rows are sent to the LLM for the summary.
+# env: NL2SQL_SUMMARY_MAX_ROWS
+# nl2sql.summary.max-rows=50
+
 # ---- Business context (optional) -----------------------------------------------------------------
 # env: NL2SQL_SEMANTICS_PATH
 # nl2sql.semantics-path=semantics.json

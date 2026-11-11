@@ -19,7 +19,7 @@ Use it as a Java library, a REST server, or a free Windows desktop app.
 - **Guardrails:** a single SELECT only, known tables and columns only, blocked columns, read-only transactions,
   a row limit and a statement timeout
 - **Privacy:** only the schema (table and column names, plus a few sample values of code-like columns) goes to the
-  LLM, never your result rows
+  LLM, never your result rows (unless you opt in to the plain-English [result summary](#result-summary-optional))
 - **Follow-up questions:** pass earlier turns and ask "now only for Mumbai"
 
 **Who it's for:** business users who want their own KPIs and ad-hoc reports without waiting for a developer;
@@ -114,7 +114,8 @@ require the `X-API-Key` header. Full setup below.
      "rows": [["Gati Express", 14], ["TCI Freight", 11]],
      "row_count": 5,
      "truncated": false,
-     "elapsed_ms": 18.4
+     "elapsed_ms": 18.4,
+     "summary": null
    }
    ```
 
@@ -166,6 +167,8 @@ Precedence, highest first:
 | `nl2sql.guardrails.blocked-columns` | `NL2SQL_BLOCKED_COLUMNS` | | `table.column,...`; hidden from the model and refused in SQL |
 | `nl2sql.guardrails.allow-select-star` | `NL2SQL_ALLOW_SELECT_STAR` | `true` | |
 | `nl2sql.guardrails.max-correction-attempts` | `NL2SQL_MAX_CORRECTION_ATTEMPTS` | `2` | Times the model may fix its own failing SQL (0–5) |
+| `nl2sql.summary.enabled` | `NL2SQL_SUMMARY_ENABLED` | `false` | Add a plain-English summary of the rows. **Sends result rows to the LLM** (see [Result summary](#result-summary-optional)) |
+| `nl2sql.summary.max-rows` | `NL2SQL_SUMMARY_MAX_ROWS` | `50` | Most rows sent to the LLM for the summary |
 | `nl2sql.semantics-path` | `NL2SQL_SEMANTICS_PATH` | | JSON with table/column descriptions, synonyms and a glossary |
 | `nl2sql.examples-path` | `NL2SQL_EXAMPLES_PATH` | | JSON file of verified question/SQL pairs (also written by `POST /v1/examples`) |
 | `nl2sql.extra-instructions` | `NL2SQL_EXTRA_INSTRUCTIONS` | | Free text added to the prompt |
@@ -187,6 +190,16 @@ Precedence, highest first:
   "glossary": {"late": "delivered_at > promised_delivery_at"}
 }
 ```
+
+### Result summary (optional)
+
+Set `nl2sql.summary.enabled=true` (`NL2SQL_SUMMARY_ENABLED=true`) to get a one-paragraph plain-English summary of
+the rows alongside the SQL and the data. It appears in `QueryResult.summary()` and in the `summary` field of
+`POST /v1/ask`.
+
+> **This sends your result rows to the LLM.** It is **off by default** because, without it, only the schema is
+> sent and your data never leaves the database. At most `nl2sql.summary.max-rows` rows (default 50) are included.
+> Leave it off when result rows are sensitive.
 
 ## REST API
 

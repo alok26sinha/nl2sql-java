@@ -53,10 +53,11 @@ final class ApiModels {
             List<List<Object>> rows,
             @JsonProperty("row_count") int rowCount,
             boolean truncated,
-            @JsonProperty("elapsed_ms") double elapsedMs) {
+            @JsonProperty("elapsed_ms") double elapsedMs,
+            String summary) {
         static AskResponse of(QueryResult r) {
             return new AskResponse(r.question(), r.sql(), r.explanation(), r.clarification(), r.tablesUsed(),
-                    r.attempts(), r.error(), r.columns(), r.rows(), r.rowCount(), r.truncated(), r.elapsedMs());
+                    r.attempts(), r.error(), r.columns(), r.rows(), r.rowCount(), r.truncated(), r.elapsedMs(), r.summary());
         }
     }
 
