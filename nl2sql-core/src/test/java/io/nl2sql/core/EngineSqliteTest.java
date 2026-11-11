@@ -112,6 +112,65 @@ class EngineSqliteTest {
     }
 
     @Test
+    void noSummaryByDefault() {
+        llm.sql("SELECT COUNT(*) AS n FROM shipments");
+        QueryResult r = engine.ask("how many shipments", List.of());
+        assertThat(r.ok()).as(r.error()).isTrue();
+        assertThat(r.summary()).isNull();
+        assertThat(llm.calls).hasSize(1); // no extra summary call
+    }
+
+    @Test
+    void summarisesResultsWhenEnabled() {
+        engine.settings().getSummary().setEnabled(true);
+        llm.sql("SELECT COUNT(*) AS n FROM shipments");
+        llm.queue("There are 120 shipments in total.");
+        QueryResult r = engine.ask("how many shipments", List.of());
+        assertThat(r.ok()).as(r.error()).isTrue();
+        assertThat(r.summary()).isEqualTo("There are 120 shipments in total.");
+        assertThat(llm.calls).hasSize(2);
+        // the result rows were sent to the LLM for the summary
+        assertThat(llm.lastUserPrompt()).contains("120");
+    }
+
+    @Test
+    void summaryFailureDoesNotFailTheQuery() {
+        // A provider that answers the SQL but fails on the follow-up summary call.
+        var flaky = new io.nl2sql.core.llm.LlmProvider() {
+            int calls = 0;
+            @Override
+            public io.nl2sql.core.llm.LlmResponse complete(List<io.nl2sql.core.llm.Message> messages) {
+                if (calls++ == 0) {
+                    return new io.nl2sql.core.llm.LlmResponse(
+                            "{\"sql\": \"SELECT COUNT(*) AS n FROM shipments\", \"explanation\": \"e\", \"clarification\": null}",
+                            "scripted");
+                }
+                throw new io.nl2sql.core.LlmException("summary model is down");
+            }
+        };
+        Nl2SqlSettings s = new Nl2SqlSettings();
+        s.getDb().setType("sqlite");
+        s.getDb().setName(dbFile.toString());
+        s.getSummary().setEnabled(true);
+        try (Nl2SqlEngine e = Nl2SqlEngine.create(s, flaky)) {
+            QueryResult r = e.ask("how many shipments", List.of());
+            assertThat(r.ok()).as(r.error()).isTrue();
+            assertThat(r.summary()).isNull(); // the summary failed, but the answer still returned
+            assertThat(r.rows().get(0).get(0)).isEqualTo(120);
+        }
+    }
+
+    @Test
+    void generateDoesNotSummarise() {
+        engine.settings().getSummary().setEnabled(true);
+        llm.sql("SELECT COUNT(*) FROM invoices");
+        QueryResult r = engine.generate("invoice count", List.of());
+        assertThat(r.executed()).isFalse();
+        assertThat(r.summary()).isNull();
+        assertThat(llm.calls).hasSize(1); // generate never runs the query, so there are no rows to summarise
+    }
+
+    @Test
     void parsesSloppyModelOutput() {
         var json = Nl2SqlEngine.defaultJson();
         ParsedResponse a = Prompts.parse("```json\n{\"sql\": \"SELECT 1\", \"explanation\": \"x\"}\n```", json);
