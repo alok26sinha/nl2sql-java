@@ -287,7 +287,7 @@ enables follow-up questions. The library uses Jackson 2, HikariCP, JSqlParser an
 ## Running as a service
 
 The official image is published to GHCR on each release as both `X.Y.Z` and `latest`:
-[`ghcr.io/alok26sinha/nl2sql`](https://github.com/alok26sinha/nl2sql/pkgs/container/nl2sql).
+[`ghcr.io/alok26sinha/nl2sql`](https://github.com/users/alok26sinha/packages/container/package/nl2sql).
 The container listens on `0.0.0.0:8080`; set `NL2SQL_SERVER_HOST` or `NL2SQL_SERVER_PORT` to override those defaults.
 Configure database, LLM, and other settings with the `NL2SQL_*` environment variables in the table above.
 

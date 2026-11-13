@@ -6,10 +6,13 @@ RUN mvn -B -ntp -pl nl2sql-server -am package -DskipTests
 
 FROM eclipse-temurin:21-jre
 
+RUN useradd --system --uid 10001 --create-home nl2sql
+
 WORKDIR /app
 COPY --from=build /workspace/nl2sql-server/target/nl2sql-*.jar /app/nl2sql.jar
 
 ENV NL2SQL_SERVER_HOST=0.0.0.0
 EXPOSE 8080
 
+USER nl2sql
 ENTRYPOINT ["java", "-jar", "/app/nl2sql.jar"]
