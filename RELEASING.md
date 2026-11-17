@@ -5,7 +5,14 @@ A tag `vX.Y.Z` runs `.github/workflows/release.yml`, which:
 1. sets the version to `X.Y.Z`,
 2. signs `nl2sql-core` and the parent POM with GPG and uploads them, with their sources and Javadoc, to Maven Central
    as `io.github.alok26sinha:nl2sql-core:X.Y.Z`,
-3. attaches the runnable REST server `nl2sql-X.Y.Z.jar` to a GitHub Release.
+3. attaches the runnable REST server `nl2sql-X.Y.Z.jar` to a GitHub Release,
+4. publishes `ghcr.io/alok26sinha/nl2sql:X.Y.Z` and `ghcr.io/alok26sinha/nl2sql:latest` to GitHub Container Registry.
+
+The image is built from the release tag after the Maven/GitHub Release job succeeds. It listens on `0.0.0.0:8080`
+and is configured with `NL2SQL_*` environment variables; set `NL2SQL_SERVER_API_KEY` for deployments reachable by
+untrusted clients. See [Running as a service](README.md#running-as-a-service) for a run example.
+After the first image is published, set its GHCR package visibility to **Public** in the package settings so users
+can pull it without authenticating.
 
 Maven Central releases are permanent: a version can never be changed or deleted, only superseded.
 

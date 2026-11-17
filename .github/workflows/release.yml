@@ -3,6 +3,7 @@ name: Release
 # Push a tag like v0.1.0:
 #   - nl2sql-core (+ parent POM) is signed and uploaded to Maven Central
 #   - the runnable REST server jar is attached to a GitHub Release
+#   - the container image is published to ghcr.io/alok26sinha/nl2sql
 # Secrets required (see RELEASING.md): CENTRAL_USERNAME, CENTRAL_PASSWORD, GPG_PRIVATE_KEY, GPG_PASSPHRASE
 
 on:
@@ -45,3 +46,32 @@ jobs:
           sha256sum "$JAR" > "$JAR.sha256"
           gh release create "$GITHUB_REF_NAME" "$JAR" "$JAR.sha256" nl2sql.properties.example \
             --title "nl2sql $GITHUB_REF_NAME" --generate-notes
+
+  publish-image:
+    name: Publish container image
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/alok26sinha/nl2sql
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
