@@ -42,6 +42,9 @@ public final class EnvironmentMapping {
         ENV_TO_PROPERTY.put("NL2SQL_BLOCKED_COLUMNS", "nl2sql.guardrails.blocked-columns");
         ENV_TO_PROPERTY.put("NL2SQL_ALLOW_SELECT_STAR", "nl2sql.guardrails.allow-select-star");
         ENV_TO_PROPERTY.put("NL2SQL_MAX_CORRECTION_ATTEMPTS", "nl2sql.guardrails.max-correction-attempts");
+        // result summary (opt-in; sends result rows to the LLM)
+        ENV_TO_PROPERTY.put("NL2SQL_SUMMARY_ENABLED", "nl2sql.summary.enabled");
+        ENV_TO_PROPERTY.put("NL2SQL_SUMMARY_MAX_ROWS", "nl2sql.summary.max-rows");
         // knowledge files
         ENV_TO_PROPERTY.put("NL2SQL_SEMANTICS_PATH", "nl2sql.semantics-path");
         ENV_TO_PROPERTY.put("NL2SQL_EXAMPLES_PATH", "nl2sql.examples-path");

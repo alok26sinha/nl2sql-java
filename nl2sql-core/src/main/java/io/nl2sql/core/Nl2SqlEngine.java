@@ -169,11 +169,13 @@ public class Nl2SqlEngine implements AutoCloseable {
                 ValidatedSql v = guard.validate(parsed.sql());
                 if (executor == null) {
                     return new QueryResult(question, v.sql(), parsed.explanation(), null, v.tables(), attempt, null,
-                            List.of(), List.of(), false, 0, false);
+                            List.of(), List.of(), false, 0, false, null);
                 }
                 ExecutionResult r = executor.run(v.sql());
-                return new QueryResult(question, v.sql(), parsed.explanation(), null, v.tables(), attempt, null,
-                        r.columns(), r.rows(), r.truncated(), Math.round(r.elapsedMs() * 100) / 100.0, true);
+                QueryResult result = new QueryResult(question, v.sql(), parsed.explanation(), null, v.tables(), attempt,
+                        null, r.columns(), r.rows(), r.truncated(), Math.round(r.elapsedMs() * 100) / 100.0, true, null);
+                if (settings.getSummary().isEnabled()) result = result.withSummary(summarize(question, result));
+                return result;
             } catch (GuardrailViolation | QueryExecutionException e) {
                 lastError = e.getMessage();
                 log.info("nl2sql attempt {} failed: {}", attempt, lastError);
@@ -183,6 +185,23 @@ public class Nl2SqlEngine implements AutoCloseable {
         }
         return QueryResult.failure(question, parsed == null ? "" : parsed.explanation(), attempt,
                 lastSql == null ? lastError : lastError + " (last SQL: " + lastSql + ")");
+    }
+
+    /**
+     * One short plain-English paragraph describing the rows. Opt-in: this sends the result rows to the LLM
+     * (see {@code settings.getSummary()}). A failure here is logged and yields {@code null} rather than failing
+     * the whole request.
+     */
+    private String summarize(String question, QueryResult result) {
+        try {
+            List<Message> messages = Prompts.summary(question, result.columns(), result.rows(),
+                    settings.getSummary().getMaxRows());
+            String text = llm.complete(messages).text();
+            return text == null || text.isBlank() ? null : text.strip();
+        } catch (RuntimeException e) {
+            log.info("nl2sql: result summary failed: {}", e.getMessage());
+            return null;
+        }
     }
 
     private static Path pathOrNull(String p) {

@@ -36,6 +36,7 @@ components:
             row_count: {type: integer}
             truncated: {type: boolean, description: More rows existed than the max-rows limit}
             elapsed_ms: {type: number}
+            summary: {type: string, nullable: true, description: 'Plain-English summary of the rows; present only when nl2sql.summary.enabled is true (off by default, it sends result rows to the LLM)'}
     Error:
       type: object
       properties: {error: {type: string}}

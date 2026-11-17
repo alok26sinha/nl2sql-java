@@ -67,6 +67,28 @@ public final class Prompts {
         return List.of(Message.system(system), Message.user(String.join("\n\n", parts)));
     }
 
+    private static final String SUMMARY_SYSTEM = """
+            You explain query results to a business user. Given the question and the rows a SQL query returned,
+            write one short paragraph of plain English that states the key figures and what they mean. Use only
+            the numbers in the rows; do not invent data, mention SQL, or add advice. If no rows were returned,
+            say that nothing matched the question.""";
+
+    /** Prompt for an optional plain-English summary of result rows (at most {@code maxRows} rows are included). */
+    public static List<Message> summary(String question, List<String> columns, List<List<Object>> rows, int maxRows) {
+        int limit = Math.max(1, maxRows);
+        StringBuilder user = new StringBuilder("### Question\n").append(question == null ? "" : question.strip());
+        user.append("\n\n### Result\n");
+        if (columns != null && !columns.isEmpty()) user.append("Columns: ").append(String.join(", ", columns)).append('\n');
+        if (rows == null || rows.isEmpty()) {
+            user.append("(no rows)");
+        } else {
+            int shown = Math.min(rows.size(), limit);
+            for (int i = 0; i < shown; i++) user.append(rows.get(i)).append('\n');
+            if (rows.size() > shown) user.append("... and ").append(rows.size() - shown).append(" more row(s)");
+        }
+        return List.of(Message.system(SUMMARY_SYSTEM), Message.user(user.toString()));
+    }
+
     public static Message correction(String sql, String error) {
         return Message.user("The previous SQL failed.\nSQL:\n" + sql + "\n\nError:\n" + error
                 + "\n\nFix the query using only the schema provided. Respond with the same JSON format.");

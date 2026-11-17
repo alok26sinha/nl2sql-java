@@ -5,6 +5,7 @@ public class Nl2SqlSettings {
     private DatabaseSettings db = new DatabaseSettings();
     private LlmSettings llm = new LlmSettings();
     private GuardrailSettings guardrails = new GuardrailSettings();
+    private SummarySettings summary = new SummarySettings();
     /** Semantic layer JSON (table/column descriptions, synonyms, glossary). Same format as the Python version. */
     private String semanticsPath;
     /** Verified question/SQL examples JSON. Same format as the Python version. */
@@ -18,6 +19,8 @@ public class Nl2SqlSettings {
     public void setLlm(LlmSettings llm) { this.llm = llm; }
     public GuardrailSettings getGuardrails() { return guardrails; }
     public void setGuardrails(GuardrailSettings guardrails) { this.guardrails = guardrails; }
+    public SummarySettings getSummary() { return summary; }
+    public void setSummary(SummarySettings summary) { this.summary = summary; }
     public String getSemanticsPath() { return semanticsPath; }
     public void setSemanticsPath(String semanticsPath) { this.semanticsPath = semanticsPath; }
     public String getExamplesPath() { return examplesPath; }
