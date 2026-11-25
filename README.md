@@ -160,6 +160,7 @@ Precedence, highest first:
 | `nl2sql.db.exclude-tables` | `NL2SQL_EXCLUDE_TABLES` | | Comma-separated |
 | `nl2sql.db.sample-values` | `NL2SQL_SAMPLE_VALUES` | `true` | Show the model a few distinct values of code-like columns (never personal data) |
 | `nl2sql.db.pool-size` | `NL2SQL_DB_POOL_SIZE` | `5` | |
+| `nl2sql.db.ssh.*` | `NL2SQL_DB_SSH_*` | off | SSH tunnel to the database, see [below](#ssh-tunnel-optional) |
 | `nl2sql.llm.provider` | `NL2SQL_LLM_PROVIDER` | `openai` | `openai` (any OpenAI-compatible API) or `anthropic` |
 | `nl2sql.llm.base-url` | `NL2SQL_LLM_BASE_URL` | `https://api.openai.com/v1` | Azure: `https://<resource>.openai.azure.com/openai/v1` |
 | `nl2sql.llm.api-key` | `NL2SQL_LLM_API_KEY` | | |
@@ -181,6 +182,45 @@ Precedence, highest first:
 | `nl2sql.server.api-key` | `NL2SQL_SERVER_API_KEY` | | Requires header `X-API-Key` on `/v1/*` |
 | `server.address` | `NL2SQL_SERVER_HOST` | `127.0.0.1` | `0.0.0.0` to accept remote connections (set an API key!) |
 | `server.port` | `NL2SQL_SERVER_PORT` | `8080` | |
+
+### SSH tunnel (optional)
+
+When the database is reachable only through a bastion / jump host, nl2sql can tunnel the JDBC connection over SSH
+(local port forwarding, like `ssh -L`). Setting `nl2sql.db.ssh.host` turns it on. `nl2sql.db.host` and
+`nl2sql.db.port` are then the database address **as seen from the SSH server**: often `localhost`, or a private IP
+or cloud endpoint.
+
+```properties
+nl2sql.db.type=postgres
+nl2sql.db.host=10.0.3.17
+nl2sql.db.name=erp
+nl2sql.db.username=nl2sql_reader
+nl2sql.db.ssh.host=bastion.example.com
+nl2sql.db.ssh.username=tunnel
+nl2sql.db.ssh.private-key=~/.ssh/id_ed25519
+```
+
+In the library the same settings are on `settings.getDb().getSsh()` (`setHost`, `setUsername`, `setPrivateKey`, ...).
+
+| Property | Environment variable | Default | Notes |
+|---|---|---|---|
+| `nl2sql.db.ssh.host` | `NL2SQL_DB_SSH_HOST` | | SSH server; set it to use the tunnel |
+| `nl2sql.db.ssh.port` | `NL2SQL_DB_SSH_PORT` | `22` | |
+| `nl2sql.db.ssh.username` | `NL2SQL_DB_SSH_USERNAME` | | |
+| `nl2sql.db.ssh.private-key` | `NL2SQL_DB_SSH_PRIVATE_KEY` | | Key file: OpenSSH, PEM or PuTTY `.ppk` (recommended) |
+| `nl2sql.db.ssh.private-key-passphrase` | `NL2SQL_DB_SSH_PRIVATE_KEY_PASSPHRASE` | | |
+| `nl2sql.db.ssh.password` | `NL2SQL_DB_SSH_PASSWORD` | | If you have no key |
+| `nl2sql.db.ssh.known-hosts` | `NL2SQL_DB_SSH_KNOWN_HOSTS` | `~/.ssh/known_hosts` | The server's host key must be listed here |
+| `nl2sql.db.ssh.strict-host-key-checking` | `NL2SQL_DB_SSH_STRICT_HOST_KEY_CHECKING` | `true` | `false` accepts any host key: testing only |
+| `nl2sql.db.ssh.local-port` | `NL2SQL_DB_SSH_LOCAL_PORT` | `0` (free port) | Local loopback port of the tunnel |
+| `nl2sql.db.ssh.connect-timeout-seconds` | `NL2SQL_DB_SSH_CONNECT_TIMEOUT` | `15` | |
+| `nl2sql.db.ssh.keep-alive-seconds` | `NL2SQL_DB_SSH_KEEP_ALIVE` | `30` | `0` turns keep-alives off |
+
+The tunnel opens on the first query and reopens on its own if it drops. Add the host key once by connecting with
+`ssh tunnel@bastion.example.com` from the same machine and account. It does not work with a full `nl2sql.db.url`
+or SQLite. The JDBC driver sees `127.0.0.1`, so TLS options that verify the server's host name
+(PostgreSQL `sslmode=verify-full`, SQL Server `encrypt=true` without `trustServerCertificate`) need
+`hostNameInCertificate` (SQL Server) or `sslmode=require` (PostgreSQL).
 
 ### Semantics file (optional)
 

@@ -57,6 +57,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Not managed by Spring Boot -->
         <jsqlparser.version>4.9</jsqlparser.version>
+        <!-- Maintained JSch fork (SSH tunnel to the database); no transitive dependencies -->
+        <jsch.version>0.2.20</jsch.version>
         <!-- The core library uses Jackson 2 (stable API); Spring MVC in the server uses Jackson 3. -->
         <jackson2.version>2.20.1</jackson2.version>
         <!-- Maven Central: false = upload and validate, then press "Publish" in the Central Portal -->
@@ -74,6 +76,11 @@
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
                 <version>${jsqlparser.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.mwiede</groupId>
+                <artifactId>jsch</artifactId>
+                <version>${jsch.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

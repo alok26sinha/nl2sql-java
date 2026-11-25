@@ -5,14 +5,27 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.nl2sql.core.config.DatabaseSettings;
 import io.nl2sql.core.config.Dialect;
 
-/** Builds the connection pool. It connects lazily, so the service starts even while the database is down. */
+import java.sql.Connection;
+import java.sql.SQLException;
+
+/**
+ * Builds the connection pool. It connects lazily, so the service starts even while the database is down.
+ * With {@code nl2sql.db.ssh.host} set, connections go through an SSH tunnel that opens on first use.
+ */
 public final class DataSourceFactory {
     private DataSourceFactory() {
     }
 
     public static HikariDataSource create(DatabaseSettings db, int queryTimeoutSeconds) {
-        String url = db.jdbcUrl();
         Dialect dialect = db.dialect();
+        SshTunnel tunnel = null;
+        String url;
+        if (db.getSsh().isEnabled()) {
+            tunnel = SshTunnel.create(db.getSsh(), db.tunnelTargetHost(), db.tunnelTargetPort());
+            url = db.jdbcUrlVia(SshTunnel.LOCAL_HOST, tunnel.localPort());
+        } else {
+            url = db.jdbcUrl();
+        }
         HikariConfig cfg = new HikariConfig();
         cfg.setPoolName("nl2sql");
         cfg.setJdbcUrl(url);
@@ -43,6 +56,31 @@ public final class DataSourceFactory {
                 cfg.setMaximumPoolSize(1);
             }
         }
-        return new HikariDataSource(cfg);
+        return tunnel == null ? new HikariDataSource(cfg) : new TunneledDataSource(cfg, tunnel);
+    }
+
+    /** A pool whose connections go through an SSH tunnel; the tunnel is (re)opened before each borrow. */
+    static final class TunneledDataSource extends HikariDataSource {
+        private final SshTunnel tunnel;
+
+        TunneledDataSource(HikariConfig cfg, SshTunnel tunnel) {
+            super(cfg);
+            this.tunnel = tunnel;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            tunnel.ensureOpen();
+            return super.getConnection();
+        }
+
+        @Override
+        public void close() {
+            try {
+                super.close();
+            } finally {
+                if (tunnel != null) tunnel.close(); // null only if the pool constructor failed
+            }
+        }
     }
 }

@@ -37,6 +37,39 @@ nl2sql.db.username=nl2sql_reader
 # env: NL2SQL_DB_POOL_SIZE
 # nl2sql.db.pool-size=5
 
+# ---- SSH tunnel to the database (optional; TCP/IP over SSH) --------------------------------------
+# For a database reachable only through a bastion / jump host. Setting nl2sql.db.ssh.host turns it on.
+# nl2sql.db.host and nl2sql.db.port are then the database address AS SEEN FROM THE SSH SERVER
+# (often localhost, or a private IP / RDS endpoint). Not available with nl2sql.db.url or SQLite.
+# env: NL2SQL_DB_SSH_HOST
+# nl2sql.db.ssh.host=bastion.example.com
+# env: NL2SQL_DB_SSH_PORT
+# nl2sql.db.ssh.port=22
+# env: NL2SQL_DB_SSH_USERNAME
+# nl2sql.db.ssh.username=tunnel
+# Private key file (OpenSSH, PEM or PuTTY .ppk). Recommended over a password.
+# env: NL2SQL_DB_SSH_PRIVATE_KEY
+# nl2sql.db.ssh.private-key=~/.ssh/id_ed25519
+# Prefer the environment variable for secrets.
+# env: NL2SQL_DB_SSH_PRIVATE_KEY_PASSPHRASE
+# nl2sql.db.ssh.private-key-passphrase=
+# Password authentication, if you have no key. Prefer the environment variable.
+# env: NL2SQL_DB_SSH_PASSWORD
+# nl2sql.db.ssh.password=
+# The server's host key must be in this file (default ~/.ssh/known_hosts): connect once with ssh to add it.
+# env: NL2SQL_DB_SSH_KNOWN_HOSTS
+# nl2sql.db.ssh.known-hosts=~/.ssh/known_hosts
+# false accepts any host key. Testing only: the connection can then be intercepted.
+# env: NL2SQL_DB_SSH_STRICT_HOST_KEY_CHECKING
+# nl2sql.db.ssh.strict-host-key-checking=true
+# Local loopback port for the tunnel; 0 picks a free one.
+# env: NL2SQL_DB_SSH_LOCAL_PORT
+# nl2sql.db.ssh.local-port=0
+# env: NL2SQL_DB_SSH_CONNECT_TIMEOUT
+# nl2sql.db.ssh.connect-timeout-seconds=15
+# env: NL2SQL_DB_SSH_KEEP_ALIVE  (seconds; 0 = off)
+# nl2sql.db.ssh.keep-alive-seconds=30
+
 # ---- LLM -----------------------------------------------------------------------------------------
 # openai (any OpenAI-compatible API: OpenAI, Azure OpenAI, Groq, Ollama, vLLM, LiteLLM...) | anthropic
 # env: NL2SQL_LLM_PROVIDER
