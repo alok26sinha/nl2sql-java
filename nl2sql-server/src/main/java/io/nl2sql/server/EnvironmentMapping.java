@@ -27,6 +27,18 @@ public final class EnvironmentMapping {
         ENV_TO_PROPERTY.put("NL2SQL_INCLUDE_TABLES", "nl2sql.db.include-tables");
         ENV_TO_PROPERTY.put("NL2SQL_EXCLUDE_TABLES", "nl2sql.db.exclude-tables");
         ENV_TO_PROPERTY.put("NL2SQL_SAMPLE_VALUES", "nl2sql.db.sample-values");
+        // SSH tunnel to the database (TCP/IP over SSH)
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_HOST", "nl2sql.db.ssh.host");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_PORT", "nl2sql.db.ssh.port");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_USERNAME", "nl2sql.db.ssh.username");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_PASSWORD", "nl2sql.db.ssh.password");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_PRIVATE_KEY", "nl2sql.db.ssh.private-key");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_PRIVATE_KEY_PASSPHRASE", "nl2sql.db.ssh.private-key-passphrase");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_KNOWN_HOSTS", "nl2sql.db.ssh.known-hosts");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_STRICT_HOST_KEY_CHECKING", "nl2sql.db.ssh.strict-host-key-checking");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_LOCAL_PORT", "nl2sql.db.ssh.local-port");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_CONNECT_TIMEOUT", "nl2sql.db.ssh.connect-timeout-seconds");
+        ENV_TO_PROPERTY.put("NL2SQL_DB_SSH_KEEP_ALIVE", "nl2sql.db.ssh.keep-alive-seconds");
         // LLM
         ENV_TO_PROPERTY.put("NL2SQL_LLM_PROVIDER", "nl2sql.llm.provider");
         ENV_TO_PROPERTY.put("NL2SQL_LLM_BASE_URL", "nl2sql.llm.base-url");

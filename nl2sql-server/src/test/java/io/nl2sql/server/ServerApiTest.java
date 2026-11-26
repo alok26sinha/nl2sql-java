@@ -134,5 +134,7 @@ class ServerApiTest {
         Map<String, String> env = Map.of("NL2SQL_DB_TYPE", "postgres", "NL2SQL_SERVER_PORT", "9000", "UNRELATED", "x");
         Map<String, String> props = EnvironmentMapping.toProperties(env);
         assertThat(props).containsEntry("nl2sql.db.type", "postgres").containsEntry("server.port", "9000").hasSize(2);
+        assertThat(EnvironmentMapping.toProperties(Map.of("NL2SQL_DB_SSH_HOST", "bastion", "NL2SQL_DB_SSH_PRIVATE_KEY", "~/.ssh/id")))
+                .containsEntry("nl2sql.db.ssh.host", "bastion").containsEntry("nl2sql.db.ssh.private-key", "~/.ssh/id");
     }
 }

@@ -33,9 +33,54 @@ public class DatabaseSettings {
     /** Send up to 5 example values of low-cardinality text columns to the LLM. */
     private boolean sampleValues = true;
     private int poolSize = 5;
+    /** Optional SSH tunnel (nl2sql.db.ssh.*). */
+    private SshSettings ssh = new SshSettings();
 
     /** The JDBC URL to connect with (without credentials). */
     public String jdbcUrl() {
+        return jdbcUrl(null, null);
+    }
+
+    /**
+     * The JDBC URL that connects through a local SSH tunnel endpoint instead of {@code host:port}, which then
+     * become the tunnel's remote target.
+     */
+    public String jdbcUrlVia(String localHost, int localPort) {
+        checkTunnelable();
+        return jdbcUrl(localHost, localPort);
+    }
+
+    /** Where the SSH server should forward to: the configured database host and port (default port per type). */
+    public String tunnelTargetHost() {
+        checkTunnelable();
+        String h = host.trim();
+        int slash = h.indexOf('\\'); // SQL Server named instance: the tunnel needs only the machine name
+        return slash > 0 ? h.substring(0, slash) : h;
+    }
+
+    public int tunnelTargetPort() {
+        checkTunnelable();
+        return port != null ? port : DbType.parse(type).defaultPort();
+    }
+
+    private void checkTunnelable() {
+        if (notBlank(url)) {
+            throw new ConfigurationException("The SSH tunnel (nl2sql.db.ssh.host) needs nl2sql.db.type/host/port/name, "
+                    + "not a full JDBC URL in nl2sql.db.url - the URL's host and port cannot be rewritten safely.");
+        }
+        if (!notBlank(type)) jdbcUrl(); // throws the usual "not configured" message
+        DbType t = DbType.parse(type);
+        if (t == DbType.SQLITE) {
+            throw new ConfigurationException("SQLite is a local file; an SSH tunnel (nl2sql.db.ssh.host) does not apply.");
+        }
+        require(host, t.id() + ": the database host (as seen from the SSH server) is required in nl2sql.db.host");
+        if (t == DbType.SQLSERVER && host.contains("\\") && port == null) {
+            throw new ConfigurationException("SQL Server named instances use a dynamic port; with an SSH tunnel set "
+                    + "the instance's TCP port in nl2sql.db.port and the plain host name in nl2sql.db.host.");
+        }
+    }
+
+    private String jdbcUrl(String hostOverride, Integer portOverride) {
         if (notBlank(url)) return url.trim();
         if (!notBlank(type)) {
             throw new ConfigurationException("Database not configured. Set nl2sql.db.type (NL2SQL_DB_TYPE): "
@@ -49,9 +94,9 @@ public class DatabaseSettings {
             return "jdbc:sqlite:" + name.trim();
         }
         require(host, t.id() + ": the server host name is required (nl2sql.db.host / NL2SQL_DB_HOST)");
-        String h = host.trim();
-        boolean namedInstance = t == DbType.SQLSERVER && h.contains("\\");
-        Integer p = port != null ? port : (namedInstance ? null : t.defaultPort());
+        String h = hostOverride != null ? hostOverride : host.trim();
+        boolean namedInstance = hostOverride == null && t == DbType.SQLSERVER && h.contains("\\");
+        Integer p = portOverride != null ? portOverride : port != null ? port : (namedInstance ? null : t.defaultPort());
         String hostPort = p == null ? h : h + ":" + p;
         return switch (t) {
             case ORACLE -> {
@@ -222,6 +267,8 @@ public class DatabaseSettings {
     public void setSampleValues(boolean sampleValues) { this.sampleValues = sampleValues; }
     public int getPoolSize() { return poolSize; }
     public void setPoolSize(int poolSize) { this.poolSize = poolSize; }
+    public SshSettings getSsh() { return ssh; }
+    public void setSsh(SshSettings ssh) { this.ssh = ssh != null ? ssh : new SshSettings(); }
 
     static List<String> clean(List<String> in) {
         List<String> out = new ArrayList<>();
@@ -232,6 +279,7 @@ public class DatabaseSettings {
     @Override
     public String toString() { // never print the password
         return "DatabaseSettings[url=" + (notBlank(url) ? "<set>" : type + "://" + host + ":" + port + "/" + name)
-                + ", schema=" + schema + ", username=" + username + ", password=" + (notBlank(password) ? "<set>" : "") + "]";
+                + ", schema=" + schema + ", username=" + username + ", password=" + (notBlank(password) ? "<set>" : "")
+                + (ssh.isEnabled() ? ", ssh=" + ssh : "") + "]";
     }
 }
