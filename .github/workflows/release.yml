@@ -44,8 +44,11 @@ jobs:
         run: |
           JAR=nl2sql-server/target/nl2sql-${GITHUB_REF_NAME#v}.jar
           sha256sum "$JAR" > "$JAR.sha256"
+          # Hand-written notes in .github/release-notes/<tag>.md when present, otherwise GitHub's generated list.
+          NOTES="--generate-notes"
+          if [ -f ".github/release-notes/$GITHUB_REF_NAME.md" ]; then NOTES="--notes-file .github/release-notes/$GITHUB_REF_NAME.md"; fi
           gh release create "$GITHUB_REF_NAME" "$JAR" "$JAR.sha256" nl2sql.properties.example \
-            --title "nl2sql $GITHUB_REF_NAME" --generate-notes
+            --title "nl2sql $GITHUB_REF_NAME" $NOTES
 
   publish-image:
     name: Publish container image
