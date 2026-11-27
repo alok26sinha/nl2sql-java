@@ -40,7 +40,7 @@ product teams adding an "ask your data" box; analysts who want a fast first draf
 <dependency>
   <groupId>io.github.alok26sinha</groupId>
   <artifactId>nl2sql-core</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 <!-- plus the JDBC driver for your database -->
 ```
@@ -70,7 +70,7 @@ Java 21, Apache-2.0. The core library has no Spring dependency. More in
 ```bash
 export NL2SQL_DB_TYPE=mysql NL2SQL_DB_HOST=localhost NL2SQL_DB_NAME=shop NL2SQL_DB_USERNAME=ro NL2SQL_DB_PASSWORD='...'
 export NL2SQL_LLM_MODEL=gpt-4.1-mini NL2SQL_LLM_API_KEY='sk-...'
-java -jar nl2sql-0.1.0.jar      # from GitHub Releases
+java -jar nl2sql-0.2.0.jar      # from GitHub Releases
 curl -s localhost:8080/v1/ask -H 'Content-Type: application/json' -d '{"question":"How many orders shipped late last week?"}'
 ```
 
@@ -86,11 +86,11 @@ require the `X-API-Key` header. Full setup below.
    export NL2SQL_DB_TYPE=mysql NL2SQL_DB_HOST=localhost NL2SQL_DB_NAME=tms
    export NL2SQL_DB_USERNAME=nl2sql_reader NL2SQL_DB_PASSWORD='...'
    export NL2SQL_LLM_BASE_URL=https://api.openai.com/v1 NL2SQL_LLM_MODEL=gpt-4.1-mini NL2SQL_LLM_API_KEY='sk-...'
-   java -jar nl2sql-0.1.0.jar
+   java -jar nl2sql-0.2.0.jar
    ```
 
    ...or copy [`nl2sql.properties.example`](nl2sql.properties.example) to `nl2sql.properties` next to the jar and
-   run `java -jar nl2sql-0.1.0.jar`. Use `NL2SQL_CONFIG=/path/to/file.properties` to load another file.
+   run `java -jar nl2sql-0.2.0.jar`. Use `NL2SQL_CONFIG=/path/to/file.properties` to load another file.
 
    On Windows (PowerShell): `$env:NL2SQL_DB_TYPE="mysql"` and so on.
 
@@ -222,6 +222,11 @@ or SQLite. The JDBC driver sees `127.0.0.1`, so TLS options that verify the serv
 (PostgreSQL `sslmode=verify-full`, SQL Server `encrypt=true` without `trustServerCertificate`) need
 `hostNameInCertificate` (SQL Server) or `sslmode=require` (PostgreSQL).
 
+The schema is read with few round trips, because through a bastion each one waits for the network: on
+MySQL/MariaDB the whole structure takes three `information_schema` queries whatever the number of tables, and sample
+values take one query per table. With 40 tables behind a bastion with 100 ms delay that is about 44 queries instead of
+about 380.
+
 ### Semantics file (optional)
 
 ```json
@@ -300,7 +305,7 @@ No separate server is needed: add the core library and the JDBC driver for your 
 <dependency>
   <groupId>io.github.alok26sinha</groupId>
   <artifactId>nl2sql-core</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 <dependency>
   <groupId>com.mysql</groupId>
@@ -351,7 +356,7 @@ In a Spring Boot application, add the starter instead of wiring the engine yours
 <dependency>
   <groupId>io.github.alok26sinha</groupId>
   <artifactId>nl2sql-spring-boot-starter</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
@@ -392,7 +397,7 @@ docker run -d --name nl2sql --restart unless-stopped -p 8080:8080 --env-file nl2
   ghcr.io/alok26sinha/nl2sql:latest
 ```
 
-For a fixed deployment version, replace `latest` with the release version, for example `0.1.0`.
+For a fixed deployment version, replace `latest` with the release version, for example `0.2.0`.
 
 ## Building from source
 
