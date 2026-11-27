@@ -12,6 +12,7 @@
 
     <artifactId>nl2sql-spring-boot-starter</artifactId>
     <name>nl2sql-spring-boot-starter</name>
+    <url>https://github.com/alok26sinha/nl2sql-java</url>
     <description>Spring Boot auto-configuration for nl2sql: an Nl2SqlEngine bean from nl2sql.* properties, reusing the application's DataSource</description>
 
     <dependencies>

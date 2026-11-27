@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -22,9 +23,12 @@ import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 /**
- * Reads tables, columns, keys and comments through JDBC metadata, then samples a few values of
- * low-cardinality text columns so the LLM matches codes like 'D' or 'DELIVERED' exactly.
- * Personal-looking columns and values are never sampled.
+ * Reads tables, columns, keys and comments, then samples a few values of low-cardinality text columns so the
+ * LLM matches codes like 'D' or 'DELIVERED' exactly. Personal-looking columns and values are never sampled.
+ *
+ * <p>Round trips are kept low because each one costs a network delay, which adds up through an SSH bastion or
+ * a slow WAN: MySQL/MariaDB are read from {@code information_schema} in three queries whatever the number of
+ * tables (other databases use JDBC metadata, three calls per table), and sample values take one query per table.
  */
 public class SchemaIntrospector {
     private static final Logger log = LoggerFactory.getLogger(SchemaIntrospector.class);
@@ -45,10 +49,17 @@ public class SchemaIntrospector {
 
     private final DataSource dataSource;
     private final Dialect dialect;
+    private final boolean useInformationSchema;
 
     public SchemaIntrospector(DataSource dataSource, Dialect dialect) {
+        this(dataSource, dialect, true);
+    }
+
+    /** {@code useInformationSchema=false} forces the JDBC-metadata reader on MySQL/MariaDB too (for tests). */
+    SchemaIntrospector(DataSource dataSource, Dialect dialect, boolean useInformationSchema) {
         this.dataSource = dataSource;
         this.dialect = dialect;
+        this.useInformationSchema = useInformationSchema;
     }
 
     public SchemaCatalog introspect(String schema, List<String> include, List<String> exclude,
@@ -60,6 +71,13 @@ public class SchemaIntrospector {
             DatabaseMetaData md = conn.getMetaData();
             String catalog = catalogFor(conn);
             String schemaPattern = schemaFor(conn, schema);
+            if (useInformationSchema && (dialect == Dialect.MYSQL || dialect == Dialect.MARIADB)) {
+                SchemaCatalog fast = readMysql(conn, catalog, schema, inc, exc, blocked); // same database as JDBC metadata
+                if (fast != null) {
+                    if (sampleValues) collectSamples(conn, fast, schemaPattern);
+                    return fast;
+                }
+            }
             SchemaCatalog cat = new SchemaCatalog(dialect, schema);
 
             List<String[]> tableRows = new ArrayList<>(); // physical name, remarks
@@ -106,6 +124,117 @@ public class SchemaIntrospector {
             throw new SchemaException("Schema introspection failed: " + firstLine(e.getMessage()) + rootCause(e)
                     + (schema != null ? " (check that the schema '" + schema + "' exists and the user can read it)" : ""), e);
         }
+    }
+
+    /**
+     * MySQL/MariaDB: every table and view with its columns, primary key, foreign keys and comments in three
+     * queries. Returns null (the caller then uses JDBC metadata) when information_schema cannot be read or
+     * shows no tables, so the usual error messages still apply.
+     */
+    SchemaCatalog readMysql(Connection conn, String database, String schema, Set<String> inc, Set<String> exc,
+                            Set<String> blocked) {
+        if (database == null || database.isBlank()) return null;
+        try {
+            Map<String, String> remarks = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            Map<String, String> physicalByLower = new LinkedHashMap<>();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT TABLE_NAME, TABLE_TYPE, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?")) {
+                ps.setString(1, database);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String t = rs.getString(1);
+                        remarks.put(t, "VIEW".equalsIgnoreCase(rs.getString(2)) ? "" : nz(rs.getString(3)));
+                        physicalByLower.put(t.toLowerCase(Locale.ROOT), t);
+                    }
+                }
+            }
+            if (remarks.isEmpty()) return null;
+
+            Map<String, Map<String, List<String[]>>> fkParts = new LinkedHashMap<>();
+            Map<String, Set<String>> pks = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                            + "FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = ? "
+                            + "AND (REFERENCED_TABLE_NAME IS NOT NULL OR CONSTRAINT_NAME = 'PRIMARY') "
+                            + "ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION")) {
+                ps.setString(1, database);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        if (rs.getString(4) == null) { // the PRIMARY KEY constraint (COLUMN_KEY='PRI' is not reliable)
+                            pks.computeIfAbsent(rs.getString(1), k -> new HashSet<>()).add(rs.getString(3));
+                            continue;
+                        }
+                        fkParts.computeIfAbsent(rs.getString(1), k -> new TreeMap<>())
+                                .computeIfAbsent(rs.getString(2), k -> new ArrayList<>())
+                                .add(new String[]{rs.getString(3), rs.getString(4), rs.getString(5)});
+                    }
+                }
+            }
+
+            Map<String, List<Column>> columns = new LinkedHashMap<>();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, "
+                            + "NUMERIC_SCALE, IS_NULLABLE, COLUMN_KEY, COLUMN_COMMENT FROM information_schema.COLUMNS "
+                            + "WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, ORDINAL_POSITION")) {
+                ps.setString(1, database);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String t = rs.getString(1);
+                        String col = rs.getString(2);
+                        if (blocked.contains((t + "." + col).toLowerCase(Locale.ROOT))) continue;
+                        Long chars = rs.getObject(5) == null ? null : rs.getLong(5);
+                        Long precision = rs.getObject(6) == null ? null : rs.getLong(6);
+                        Long scale = rs.getObject(7) == null ? null : rs.getLong(7);
+                        columns.computeIfAbsent(t, k -> new ArrayList<>()).add(new Column(col, col,
+                                mysqlType(rs.getString(3), rs.getString(4), chars, precision, scale),
+                                "YES".equalsIgnoreCase(rs.getString(8)), pks.getOrDefault(t, Set.of()).contains(col),
+                                nz(rs.getString(10))));
+                    }
+                }
+            }
+
+            SchemaCatalog cat = new SchemaCatalog(dialect, schema);
+            List<String> names = new ArrayList<>(remarks.keySet());
+            names.sort(String::compareToIgnoreCase);
+            for (String t : names) {
+                String lname = t.toLowerCase(Locale.ROOT);
+                if ((!inc.isEmpty() && !inc.contains(lname)) || exc.contains(lname)) continue;
+                List<ForeignKey> fks = new ArrayList<>();
+                for (List<String[]> parts : fkParts.getOrDefault(t, Map.of()).values()) {
+                    List<String> cols = new ArrayList<>();
+                    List<String> refCols = new ArrayList<>();
+                    for (String[] p : parts) {
+                        cols.add(p[0]);
+                        refCols.add(p[2]);
+                    }
+                    String ref = parts.get(0)[1];
+                    fks.add(new ForeignKey(cols, physicalByLower.getOrDefault(ref.toLowerCase(Locale.ROOT), ref), refCols));
+                }
+                cat.add(new Table(t, t, columns.getOrDefault(t, new ArrayList<>()), fks, remarks.get(t)));
+            }
+            return cat;
+        } catch (SQLException e) {
+            log.debug("information_schema not readable, using JDBC metadata: {}", e.getMessage());
+            resetAfterError(conn);
+            return null;
+        }
+    }
+
+    /** information_schema column types in the same style as JDBC metadata gives them ("VARCHAR(20)", "DECIMAL(10,2)"). */
+    static String mysqlType(String dataType, String columnType, Long chars, Long precision, Long scale) {
+        String type = dataType == null ? "" : dataType.toUpperCase(Locale.ROOT);
+        if (columnType != null && columnType.toLowerCase(Locale.ROOT).contains("unsigned")) type += " UNSIGNED";
+        String lt = type.toLowerCase(Locale.ROOT);
+        if (lt.contains("char") && chars != null && chars > 0 && chars < 100000) return type + "(" + chars + ")";
+        if ((lt.startsWith("decimal") || lt.startsWith("numeric")) && precision != null && precision > 0) {
+            return type.replace(" UNSIGNED", "") + "(" + precision + (scale != null && scale > 0 ? "," + scale : "") + ")"
+                    + (type.endsWith(" UNSIGNED") ? " UNSIGNED" : "");
+        }
+        return type;
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     private String catalogFor(Connection conn) throws SQLException {
@@ -189,28 +318,76 @@ public class SchemaIntrospector {
 
     private void collectSamples(Connection conn, SchemaCatalog cat, String schemaPattern) {
         for (Table t : cat.tables().values()) {
+            List<Column> cols = new ArrayList<>();
             for (Column c : t.columns()) {
-                if (c.primaryKey() || !isText(c.type()) || isPiiColumn(c.name())) continue;
-                String sql = sampleSql(qualified(t.physicalName(), schemaPattern), dialect.quote(c.physicalName()));
-                List<String> values = new ArrayList<>();
-                try (Statement st = conn.createStatement()) {
-                    st.setQueryTimeout(10);
-                    try (ResultSet rs = st.executeQuery(sql)) {
-                        while (rs.next()) {
-                            String v = rs.getString(1);
-                            if (v != null) values.add(v.length() > 60 ? v.substring(0, 60) : v);
-                        }
-                    }
-                } catch (SQLException e) {
-                    log.debug("Skipping samples for {}.{}: {}", t.name(), c.name(), e.getMessage());
-                    resetAfterError(conn);
-                    continue;
-                }
-                if (values.isEmpty() || values.size() > SAMPLE_DISTINCT_LIMIT) continue;
+                if (!c.primaryKey() && isText(c.type()) && !isPiiColumn(c.name())) cols.add(c);
+            }
+            if (cols.isEmpty()) continue;
+            String table = qualified(t.physicalName(), schemaPattern);
+            List<List<String>> found = sampleTable(conn, t, table, cols);
+            for (int i = 0; i < cols.size(); i++) {
+                List<String> values = found.get(i);
+                if (values == null || values.isEmpty() || values.size() > SAMPLE_DISTINCT_LIMIT) continue;
                 if (values.stream().anyMatch(SchemaIntrospector::looksPersonal)) continue;
-                c.sampleValues(values.subList(0, Math.min(SAMPLE_COUNT, values.size())));
+                cols.get(i).sampleValues(values.subList(0, Math.min(SAMPLE_COUNT, values.size())));
             }
         }
+    }
+
+    /** All sampled columns of one table in a single UNION ALL query; column by column if that fails. */
+    private List<List<String>> sampleTable(Connection conn, Table t, String table, List<Column> cols) {
+        List<List<String>> found = new ArrayList<>();
+        for (int i = 0; i < cols.size(); i++) found.add(new ArrayList<>());
+        if (cols.size() > 1) {
+            try (Statement st = conn.createStatement()) {
+                st.setQueryTimeout(30);
+                try (ResultSet rs = st.executeQuery(sampleUnionSql(table, cols))) {
+                    while (rs.next()) {
+                        String v = rs.getString(2);
+                        if (v != null) found.get(rs.getInt(1)).add(v.length() > 60 ? v.substring(0, 60) : v);
+                    }
+                }
+                return found;
+            } catch (SQLException e) {
+                log.debug("Sampling {} column by column: {}", t.name(), e.getMessage());
+                resetAfterError(conn);
+                for (List<String> f : found) f.clear();
+            }
+        }
+        for (int i = 0; i < cols.size(); i++) {
+            String sql = sampleSql(table, dialect.quote(cols.get(i).physicalName()));
+            try (Statement st = conn.createStatement()) {
+                st.setQueryTimeout(10);
+                try (ResultSet rs = st.executeQuery(sql)) {
+                    while (rs.next()) {
+                        String v = rs.getString(1);
+                        if (v != null) found.get(i).add(v.length() > 60 ? v.substring(0, 60) : v);
+                    }
+                }
+            } catch (SQLException e) {
+                log.debug("Skipping samples for {}.{}: {}", t.name(), cols.get(i).name(), e.getMessage());
+                resetAfterError(conn);
+                found.set(i, null);
+            }
+        }
+        return found;
+    }
+
+    /** {@code SELECT <i>, CAST(v AS text) FROM (<sampleSql for column i>) ... UNION ALL ...}, one part per column. */
+    String sampleUnionSql(String table, List<Column> cols) {
+        String text = switch (dialect) {
+            case MYSQL, MARIADB -> "CHAR(200)";
+            case SQLSERVER -> "NVARCHAR(200)";
+            case ORACLE -> "VARCHAR2(800)";
+            case SQLITE -> "TEXT";
+            default -> "VARCHAR(200)";
+        };
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < cols.size(); i++) {
+            parts.add("SELECT " + i + " AS k, CAST(v AS " + text + ") AS v FROM ("
+                    + sampleSql(table, dialect.quote(cols.get(i).physicalName())) + ") p" + i);
+        }
+        return String.join(" UNION ALL ", parts);
     }
 
     private void resetAfterError(Connection conn) {
